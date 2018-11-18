@@ -11,6 +11,8 @@ import pandas as pd
 from PIL import Image
 from pathlib import Path
 import logging
+import argparse 
+
 #%%
 path = '/Users/matthewxfz/workspace/kuangkuang/cs512-f18-lida-kuang/Project/data/fer2013.csv'
 data = pd.read_csv(path)[['emotion','pixels']]
@@ -28,7 +30,6 @@ emotions = {0: 'angry',
             5: 'surprise',
             6: 'neutral'}
 
-#%%
 outpath = '/Users/matthewxfz/workspace/kuangkuang/cs512-f18-lida-kuang/Project/data/processed_images/'
 for i in range(images.shape[1]):
     img = images[i].reshape(48, 48)
@@ -42,11 +43,5 @@ for i in range(images.shape[1]):
     im_path.mkdir(parents = True, exist_ok = True)
     im.save(Path(im_path, im_name))
 logger = logging.getLogger(__name__)
+parser = argparse.ArgumentParser
 logger.info('making images set from FER2013 CSV file')  
-#data_train = data[data['Usage']=='Training']
-#data_test  = data[data['Usage']!='Training']
-#X_train = data_train['pixels']
-#y_train = data_train['emotion']
-#X_test = data_test['pixels']
-#y_test = data_test['emotion']
-#%%
