@@ -20,5 +20,6 @@
   
 ## Reference 
  - Use paper from [line]{}
+ - CNN training from [line](https://www.tensorflow.org/tutorials/estimators/cnn)
 
 
