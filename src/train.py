@@ -122,7 +122,7 @@ def augement_data(tfrecords_filenames, times = 10):
 
     return file_names
 
-def train(epoch_iteration=1000, batch_size = 8, angle_range = 15, data_size=4):
+def train(epoch_iteration=100, batch_size = 8, angle_range = 15, data_size=4):
     train_data_path = os.path.join(FLAGS.tf_data, 'train-00000.tfrecord')
     val_data_path = os.path.join(FLAGS.tf_data, 'validation-00000.tfrecord')
     tf.logging.info("\t[train_data] in %s\n[val_data] in %s" % (train_data_path, val_data_path))
@@ -173,8 +173,8 @@ def train(epoch_iteration=1000, batch_size = 8, angle_range = 15, data_size=4):
                     epoch, loss_v, acc[0], val_acc[0]))
 
         saver = tf.train.Saver()
-        saver_path = saver.save(sess, FLAGS.save_path)
-        print('Finished! \t save files in %s'  % saver_path)
+        saver_path = saver.save(sess, os.path.join(FLAGS.save_path, "mode_ite_%d_angel_%22f.ckpt" % (epoch_iteration, angle_range)))
+        print('Finished! \t save files in %s' % saver_path)
         # Stop the threads
         coord.request_stop()
 
