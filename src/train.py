@@ -13,6 +13,7 @@ import numpy as np
 import tensorflow as tf
 import os
 import fer2013_data as dataset_fer
+import matplotlib.pyplot as plt
 
 tf.app.flags.DEFINE_string('tf_data',
                            os.path.abspath('../data/fer2013/tfrecords'),
@@ -176,7 +177,7 @@ def train(epoch_iteration=100, batch_size = 8, angle_range = 15, data_size=4):
                     epoch, loss_v, acc[0], val_acc[0]))
 
         saver = tf.train.Saver()
-        saver_path = saver.save(sess, os.path.join(FLAGS.save_path, "mode_ite_%d_angel_%22f.ckpt" % (epoch_iteration, angle_range)))
+        saver_path = saver.save(sess, os.path.join(FLAGS.save_path, "mode_ite_%d_angel_%d.ckpt" % (epoch_iteration, angle_range)))
         print('Finished! \t save files in %s' % saver_path)
         # Stop the threads
         coord.request_stop()
@@ -184,6 +185,51 @@ def train(epoch_iteration=100, batch_size = 8, angle_range = 15, data_size=4):
         # Wait for threads to stop
         coord.join(threads)
         sess.close()
+
+    # evaluation
+    test_images, test_labels = dataset_fer.read_and_decode(val_data_files, 1,
+                                                         batch_size=batch_size,
+                                                         num_threads=8,
+                                                         max_angle=angle_range)
+    tf.logging.info("Evaluation begin")
+    with tf.Session() as sess:
+        sess.run(tf.local_variables_initializer())
+        sess.run(tf.global_variables_initializer())
+
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(coord=coord)
+
+        tf.logging.info("\tstart epoch")
+        for epoch in range(epoch_iteration):
+            try:
+                val_image, val_label = sess.run([val_images, val_labels])
+                val_acc = sess.run(metrics['accuracy'],
+                                   feed_dict={input_tensor['image']: test_images,
+                                              input_tensor['label']: test_labels})
+            except:
+                break;
+
+            if epoch % 100 == 0:
+                print("In epoch %d, loss: %.3f, validation accuracy: %.3f" % (
+                    epoch, loss_v, val_acc[0]))
+
+            try:
+                for i in range(3):
+                    plt.imshow(image[i, :, :, 0])
+                    plt.title(annotation[i, 0])
+                    plt.show()
+
+                plt.close()
+            except:
+                pass
+
+        # Stop the threads
+        coord.request_stop()
+
+        # Wait for threads to stop
+        coord.join(threads)
+        sess.close()
+
 
 
 if __name__ == "__main__":
