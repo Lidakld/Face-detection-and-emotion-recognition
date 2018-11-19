@@ -116,10 +116,13 @@ def train_op(model, labels):
     return loss, eval_metric_ops, input_tensor
 
 
-def train(epoch_iteration=1000, batch_size = 8, angle_range = 15):
+def train(epoch_iteration=1000, batch_size = 8, angle_range = 15, data_size=4):
     tfrecords_filenames = os.path.join(FLAGS.tf_data, 'train-00000.tfrecord')
     print("Read dataset in %s" % tfrecords_filenames)
-    images, labels = dataset_fer.read_and_decode(tfrecords_filenames, 1,
+    file_names = []
+    for i in range(data_size):
+        file_names.append(tfrecords_filenames)
+    images, labels = dataset_fer.read_and_decode(file_names, 1,
                    batch_size=batch_size,
                    num_threads=8,
                    max_angle=angle_range)
@@ -143,17 +146,8 @@ def train(epoch_iteration=1000, batch_size = 8, angle_range = 15):
 
         print("start epoch")
         for epoch in range(epoch_iteration):
-                try:
-                    image, label = sess.run([images, labels])
-                except:
-                    images, labels = dataset_fer.read_and_decode(tfrecords_filenames, 1,
-                        batch_size=batch_size,
-                        num_threads=8,
-                        max_angle=angle_range)
-                    image, label = sess.run([images, labels])
-                    continue
+                image, label = sess.run([images, labels])
 
-                tf.logging.info("Label types %s" % str(np.unique(label)))
                 _, loss_v, acc = sess.run([optimizer, loss, metrics['accuracy']], feed_dict={input_tensor['image']:image,
                                                                                 input_tensor['label']:label})
                 if epoch % 100 == 0:

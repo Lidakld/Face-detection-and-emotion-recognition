@@ -6,7 +6,7 @@ IMG_SIZE = 48
 
 
 def read_and_decode(tfrecords_filenames, epoch_iteration=1, batch_size=30, num_threads=8, max_angle=15):
-    filename_queue = tf.train.string_input_producer([tfrecords_filenames], num_epochs=epoch_iteration)
+    filename_queue = tf.train.string_input_producer(tfrecords_filenames, num_epochs=epoch_iteration)
 
     reader = tf.TFRecordReader()
     _, serialized_example = reader.read(filename_queue)
@@ -29,7 +29,8 @@ def read_and_decode(tfrecords_filenames, epoch_iteration=1, batch_size=30, num_t
                                                batch_size=batch_size,
                                                capacity=30,
                                                num_threads=num_threads,
-                                               min_after_dequeue=10)
+                                               min_after_dequeue=10,
+                                               allow_smaller_final_batch=True)
     angle = tf.random_uniform([batch_size, 1], -1 * max_angle / 2, max_angle / 2) / 180 * math.pi
     image = tf.contrib.image.rotate(image, angle[0])
 
