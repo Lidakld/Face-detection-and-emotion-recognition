@@ -34,7 +34,8 @@ def read_and_decode(tfrecords_filenames, epoch_iteration=1, batch_size=30, num_t
     image = tf.contrib.image.rotate(image, angle[0])
 
     # annotation = tf.one_hot(annotation, depth=7)
-    return image, annotation
+    # return image, annotation
+    return (image, annotation).make_one_shot_iterator()
 
 
 def test_read(tfrecords_filename, epoch_iteration):
@@ -105,15 +106,23 @@ def inspect_content(tfrecords_filename):
         print(label_v)
 
 
-
 if __name__ == "__main__":
     tfrecords_filename = '/home/zhou/workspace/Face-detection-and-emotion-recognition/data/fer2013/tfrecords/train-00000.tfrecord'
 
-    test_read(tfrecords_filename, 10)
+    test_read(tfrecords_filename, 2)
     # inspect_content(tfrecords_filename)
     # for example in tf.python_io.tf_record_iterator(tfrecords_filename):
     #     result = tf.train.Example.FromString(example)
     #
     #     print(result)
 
-
+# %%
+# tfrecords_filename = '/home/zhou/workspace/Face-detection-and-emotion-recognition/data/fer2013/tfrecords/train-00000.tfrecord'
+# dataset = tf.data.TFRecordDataset([tfrecords_filename], buffer_size=1024, num_parallel_reads=8)
+# iterator = dataset.make_one_shot_iterator()
+# next_batch = iterator.get_next()
+#
+# sess = tf.Session()
+# print("epoch 1")
+# for _ in range(4):
+#     print(sess.run(next_batch))
