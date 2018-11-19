@@ -20,6 +20,7 @@
   
 ## Reference 
  - Use paper from [line]{}
+ - read data [line](https://github.com/ZiJiaW/CNN-Face-Expression-Recognition/blob/master/FER.py)
  - CNN training from [line](https://www.tensorflow.org/tutorials/estimators/cnn)
 
 
