@@ -56,9 +56,9 @@ _NUM_SHARDS = 4
 def load_image(addr, shape=(48, 48)):
     # read an image and resize to (224, 224)
     # cv2 load images as BGR, convert it to RGB
-    img = cv.imread(addr)
-    img = cv.resize(img, shape, interpolation=cv.INTER_CUBIC)
-    img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+    img = cv.imread(addr, cv.IMREAD_GRAYSCALE)
+    # img = cv.resize(img, shape, interpolation=cv.INTER_CUBIC)
+    # img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
     img = img.astype(np.float32)
     return img
 
@@ -90,7 +90,7 @@ def _convert_dataset(dataset_split):
 
     dataset = os.path.join(FLAGS.image_folder, dataset_split)
     labels = os.listdir(dataset)
-    num_per_shard = 1000
+    num_per_shard = 10000
     shard_id = 0
 
     output_filename = os.path.join(
@@ -110,7 +110,7 @@ def _convert_dataset(dataset_split):
             image_data = load_image(image_filename)
 
             example = tf.train.Example(features=tf.train.Features(feature={
-                'image/encoded': _bytes_feature(image_data),
+                'image/encoded': _bytes_feature(tf.compat.as_bytes(image_data.tostring())),
                 'image/label': _int64_feature(label)
             }))
 

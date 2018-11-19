@@ -27,8 +27,13 @@ mkdir -p ${WORK_DIR}/train
 mkdir -p ${WORK_DIR}/eval
 mkdir -p ${WORK_DIR}/inference
 
-
+# to images
 python3 ./image_gen.py ${WORK_DIR}/fer2013.csv \
 	 ${WORK_DIR}/images \
 	 ${WORK_DIR}/tfrecords 
 
+# to tf records
+python3 ./build_fer2013_data.py  --image_folder ${WORK_DIR}/images \
+                --output_dir ${WORK_DIR}/tfrecords
+
+echo "[Finished] Data is ready!"
