@@ -115,28 +115,39 @@ def train_op(model, labels):
     }
     return loss, eval_metric_ops, input_tensor
 
+def augement_data(tfrecords_filenames, times = 10):
+    file_names = []
+    for i in range(times):
+        file_names.append(tfrecords_filenames)
+
+    return file_names
 
 def train(epoch_iteration=1000, batch_size = 8, angle_range = 15, data_size=4):
-    tfrecords_filenames = os.path.join(FLAGS.tf_data, 'train-00000.tfrecord')
-    print("Read dataset in %s" % tfrecords_filenames)
-    file_names = []
-    for i in range(data_size):
-        file_names.append(tfrecords_filenames)
-    images, labels = dataset_fer.read_and_decode(file_names, 1,
+    train_data_path = os.path.join(FLAGS.tf_data, 'train-00000.tfrecord')
+    val_data_path = os.path.join(FLAGS.tf_data, 'validation-00000.tfrecord')
+    tf.logging.info("\t[train_data] in %s\n[val_data] in %s" % (train_data_path, val_data_path))
+
+    train_data_files = augement_data(train_data_path, times=10)
+    val_data_files = augement_data(val_data_path, times=20)
+
+    train_images, train_labels = dataset_fer.read_and_decode(train_data_files, 1,
                    batch_size=batch_size,
                    num_threads=8,
                    max_angle=angle_range)
 
-    print("perpare trian op")
-    model = cnn_model_fn(images)
-    loss, metrics, input_tensor = train_op(model, labels)
+    val_images, val_labels = dataset_fer.read_and_decode(val_data_files, 1,
+                                                             batch_size=batch_size,
+                                                             num_threads=8,
+                                                             max_angle=angle_range)
 
-    print("get optimizer")
+    model = cnn_model_fn(train_images)
+    loss, metrics, input_tensor = train_op(model, train_labels)
+
     global_step = tf.Variable(0)
     learning_rate = tf.train.exponential_decay(0.1, global_step, 300, 0.99, staircase=True)
     optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
-    
-    print("start")
+
+    tf.logging.info("\tStart Triaining")
     with tf.Session() as sess:
         sess.run(tf.local_variables_initializer())
         sess.run(tf.global_variables_initializer())
@@ -144,19 +155,26 @@ def train(epoch_iteration=1000, batch_size = 8, angle_range = 15, data_size=4):
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
 
-        print("start epoch")
+        tf.logging.info("\tstart epoch")
         for epoch in range(epoch_iteration):
-                image, label = sess.run([images, labels])
+                train_image, train_label = sess.run([train_images, train_labels])
 
-                _, loss_v, acc = sess.run([optimizer, loss, metrics['accuracy']], feed_dict={input_tensor['image']:image,
-                                                                                input_tensor['label']:label})
+                _, loss_v, acc = sess.run([optimizer, loss, metrics['accuracy']],
+                                          feed_dict={input_tensor['image']:train_image,
+                                                    input_tensor['label']:train_label})
+
+                val_image, val_label = sess.run([ val_images, val_labels ])
+                val_acc = sess.run(metrics['accuracy'],
+                                   feed_dict={input_tensor['image']: val_image,
+                                              input_tensor['label']: val_label})
+
                 if epoch % 100 == 0:
-                    acc_v = 0
                     print("In epoch %d, loss: %.3f, accuracy: %.3f, validation accuracy: %.3f" % (
-                    epoch, loss_v, acc[0], 0))
+                    epoch, loss_v, acc[0], val_acc[0]))
+
         saver = tf.train.Saver()
-        saver_path = saver.save(sess, SAVE_PATH)
-        print('Finished!')
+        saver_path = saver.save(sess, FLAGS.save_path)
+        print('Finished! \t save files in %s'  % saver_path)
         # Stop the threads
         coord.request_stop()
 
