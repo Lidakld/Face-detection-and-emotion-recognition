@@ -122,13 +122,13 @@ def augement_data(tfrecords_filenames, times = 10):
 
     return file_names
 
-def train(epoch_iteration=100, batch_size = 8, angle_range = 15, data_size=4):
+def train(epoch_iteration=100, batch_size = 8, angle_range = 15, time=100):
     train_data_path = os.path.join(FLAGS.tf_data, 'train-00000.tfrecord')
     val_data_path = os.path.join(FLAGS.tf_data, 'validation-00000.tfrecord')
     tf.logging.info("\t[train_data] in %s\n[val_data] in %s" % (train_data_path, val_data_path))
 
-    train_data_files = augement_data(train_data_path, times=10)
-    val_data_files = augement_data(val_data_path, times=20)
+    train_data_files = augement_data(train_data_path, times=time)
+    val_data_files = augement_data(val_data_path, times=time)
 
     train_images, train_labels = dataset_fer.read_and_decode(train_data_files, 1,
                    batch_size=batch_size,
@@ -169,6 +169,7 @@ def train(epoch_iteration=100, batch_size = 8, angle_range = 15, data_size=4):
                                    feed_dict={input_tensor['image']: val_image,
                                               input_tensor['label']: val_label})
                 except:
+                    tf.logging.warning("Traing data exthuastic")
                     break;
 
                 if epoch % 100 == 0:
@@ -176,7 +177,7 @@ def train(epoch_iteration=100, batch_size = 8, angle_range = 15, data_size=4):
                     epoch, loss_v, acc[0], val_acc[0]))
 
         saver = tf.train.Saver()
-        saver_path = saver.save(sess, os.path.join(FLAGS.save_path, "mode_ite_%d_angel_%22f.ckpt" % (epoch_iteration, angle_range)))
+        saver_path = saver.save(sess, os.path.join(FLAGS.save_path, "mode_ite_%d_angel_%d.ckpt" % (epoch_iteration, angle_range)))
         print('Finished! \t save files in %s' % saver_path)
         # Stop the threads
         coord.request_stop()
@@ -187,4 +188,7 @@ def train(epoch_iteration=100, batch_size = 8, angle_range = 15, data_size=4):
 
 
 if __name__ == "__main__":
-    train()
+    train(epoch_iteration=10000,
+            batch_size=64,
+            angle_range=45,
+            time=500)
