@@ -157,16 +157,19 @@ def train(epoch_iteration=100, batch_size = 8, angle_range = 15, data_size=4):
 
         tf.logging.info("\tstart epoch")
         for epoch in range(epoch_iteration):
-                train_image, train_label = sess.run([train_images, train_labels])
+                try:
+                    train_image, train_label = sess.run([train_images, train_labels])
 
-                _, loss_v, acc = sess.run([optimizer, loss, metrics['accuracy']],
+                    _, loss_v, acc = sess.run([optimizer, loss, metrics['accuracy']],
                                           feed_dict={input_tensor['image']:train_image,
                                                     input_tensor['label']:train_label})
 
-                val_image, val_label = sess.run([ val_images, val_labels ])
-                val_acc = sess.run(metrics['accuracy'],
+                    val_image, val_label = sess.run([ val_images, val_labels ])
+                    val_acc = sess.run(metrics['accuracy'],
                                    feed_dict={input_tensor['image']: val_image,
                                               input_tensor['label']: val_label})
+                except:
+                    break;
 
                 if epoch % 100 == 0:
                     print("In epoch %d, loss: %.3f, accuracy: %.3f, validation accuracy: %.3f" % (

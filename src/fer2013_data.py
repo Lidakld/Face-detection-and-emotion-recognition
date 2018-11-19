@@ -34,9 +34,7 @@ def read_and_decode(tfrecords_filenames, epoch_iteration=1, batch_size=30, num_t
     angle = tf.random_uniform([batch_size, 1], -1 * max_angle / 2, max_angle / 2) / 180 * math.pi
     image = tf.contrib.image.rotate(image, angle[0])
 
-    # annotation = tf.one_hot(annotation, depth=7)
-    # return image, annotation
-    return (image, annotation).make_one_shot_iterator()
+    return image, annotation
 
 
 def test_read(tfrecords_filename, epoch_iteration):
