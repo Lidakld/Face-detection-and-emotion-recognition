@@ -210,23 +210,24 @@ def train(epoch_iteration=100, batch_size=8, angle_range=15, time=100, eval_epoc
 
         tf.logging.info("\tstart epoch")
         for epoch in range(eval_epoch_iteration):
-            try:
-                val_image, val_label = sess.run([val_images, val_labels])
-                val_acc, prediction = sess.run([metrics['accuracy'], metrics['prediction']],
-                                               feed_dict={input_tensor['image']: test_images,
-                                                          input_tensor['label']: test_labels})
-            except:
-                tf.logging.warning("Traing data exthuastic")
-                break;
+            #try:
+            val_image, val_label = sess.run([test_images, test_labels])
+            val_acc, prediction = sess.run([metrics['accuracy'], metrics['prediction']],
+                                               feed_dict={input_tensor['image']: val_image,
+                                                          input_tensor['label']: val_label})
+            #except:
+            #    tf.logging.warning("Evaluation Traing data exthuastic")
+            #    break;
 
             if epoch % 100 == 0:
-                print("In epoch %d, loss: %.3f, validation accuracy: %.3f" % (
-                    epoch, loss_v, val_acc[0]))
+                print("In epoch %d, validation accuracy: %.3f" % (
+                    epoch, val_acc[0]))
 
             for i in range(batch_size):
                 plt.imshow(val_image[i, :, :, 0])
-                plt.title(prediction[i])
-                plt.savefig(FLAGS.inference_path + "epoch_%d_batch_%d.jpg" % (epoch, i))
+                plt.title(str(val_label[i]) + str(prediction[i]))
+                file_path = os.path.join(FLAGS.inference_path, "epoch_%d_batch_%d.jpg" % (epoch, i))
+                plt.savefig(file_path)
 
             plt.close()
 
@@ -239,7 +240,8 @@ def train(epoch_iteration=100, batch_size=8, angle_range=15, time=100, eval_epoc
 
 
 if __name__ == "__main__":
-    train(epoch_iteration=10000,
-          batch_size=64,
+    train(epoch_iteration=100,
+          batch_size=8,
           angle_range=45,
-          time=500)
+          time=500,
+          eval_epoch_iteration=10)
