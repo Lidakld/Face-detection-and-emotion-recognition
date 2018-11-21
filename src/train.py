@@ -12,8 +12,11 @@ from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 import os
-import fer2013_data as dataset_fer
+from fer2013_data import get_data
 import matplotlib.pyplot as plt
+
+import traceback
+import glob
 
 tf.app.flags.DEFINE_string('tf_data',
                            os.path.abspath('../data/fer2013/tfrecords'),
@@ -32,13 +35,50 @@ FLAGS = tf.app.flags.FLAGS
 tf.logging.set_verbosity(tf.logging.INFO)
 
 IMAGE_SIZE = 48
+NUM_CHANNEL = 1
+
+
+def new_model(data):
+    keep_prob = tf.placeholder(tf.float32, name='KEEP')
+    data = tf.image.resize_images(data, tf.convert_to_tensor([42, 42]))
+    print("Data: %s\n" % str(data))
+    # first layer IN: 42*42*1  OUT: 20*20*32
+    kernel1 = tf.Variable(tf.truncated_normal([5, 5, NUM_CHANNEL, 32], stddev=5e-2))
+    conv1 = tf.nn.conv2d(data, kernel1, [1, 1, 1, 1], padding='SAME')
+    bias1 = tf.Variable(tf.zeros([32]))
+    relu1 = tf.nn.relu(tf.nn.bias_add(conv1, bias1))
+    pool1 = tf.nn.max_pool(relu1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID')
+
+    # second layer IN: 20*20*32  OUT: 10*10*32
+    kernel2 = tf.Variable(tf.truncated_normal([4, 4, 32, 32], stddev=5e-2))
+    conv2 = tf.nn.conv2d(pool1, kernel2, [1, 1, 1, 1], padding='SAME')
+    bias2 = tf.Variable(tf.zeros([32]))
+    relu2 = tf.nn.relu(tf.nn.bias_add(conv2, bias2))
+    pool2 = tf.nn.max_pool(relu2, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='SAME')
+
+    # third layer IN: 10*10*32  OUT: 5*5*64
+    kernel3 = tf.Variable(tf.truncated_normal([5, 5, 32, 64], stddev=5e-2))
+    conv3 = tf.nn.conv2d(pool2, kernel3, [1, 1, 1, 1], padding='SAME')
+    bias3 = tf.Variable(tf.zeros([64]))
+    relu3 = tf.nn.relu(tf.nn.bias_add(conv3, bias3))
+    pool3 = tf.nn.max_pool(relu3, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='SAME')
+
+    # fully connected layers
+    fc1_data = tf.reshape(pool3, shape=[-1, 5 * 5 * 64])
+    fc1 = tf.contrib.layers.fully_connected(fc1_data, 1024, activation_fn=tf.nn.relu)
+    fc1_out = tf.nn.dropout(fc1, keep_prob)
+
+    fc2 = tf.contrib.layers.fully_connected(fc1_out, 512, activation_fn=tf.nn.relu)
+    fc2_out = tf.nn.dropout(fc2, keep_prob)
+
+    logits = tf.contrib.layers.fully_connected(fc2_out, 7, activation_fn=None)
+    logits = tf.identity(logits, name='LOGITS')
+    return logits, keep_prob
 
 
 # Our application logic will be added here
 def cnn_model_fn(images):
     """Model function for face detection"""
-    images_t = images
-
     # Input Layer
     input_layer = images
 
@@ -83,10 +123,10 @@ def cnn_model_fn(images):
     # Logits Layer
     logits = tf.layers.dense(inputs=dense, units=7)
 
-    return logits, images_t
+    return logits, None
 
 
-def train_op(model, labels):
+def train_op(model, images, labels):
     """
     get operation of model
 
@@ -94,32 +134,39 @@ def train_op(model, labels):
     :param model:  logits of final layers
     :return:
     """
-    logits, images_t = model
+    logits, keep_prob = model(images)
 
-    model = tf.reshape(logits, [-1, 7])
-    predictions = {
-        # Generate predictions (for PREDICT and EVAL mode)
-        "classes": tf.argmax(input=logits, axis=1),
-        # Add `softmax_tensor` to the graph. It is used for PREDICT and by the
-        # `logging_hook`.
-        "probabilities": tf.nn.softmax(logits, name="softmax_tensor")
-    }
+    # one_hot_labels =  tf.one_hot(tf.squeeze(labels), depth=7)
+    # loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits, labels=one_hot_labels))
+    #
+    # correct_pred = tf.equal(tf.argmax(logits, 1), tf.argmax(one_hot_labels, 1))
+    # accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='ACCURACY')
 
-    # Calculate Loss (for both TRAIN and EVAL modes)
-    loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits)
+    loss = tf.reduce_mean((tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits)))
+    accuracy = tf.contrib.metrics.accuracy(
+        labels=labels, predictions=tf.argmax(input=logits, axis=1))
 
-    # Add evaluation metrics (for EVAL mode)
-    eval_metric_ops = {
-        "accuracy": tf.metrics.accuracy(
-            labels=labels, predictions=predictions["classes"]),
-        "prediction": predictions["classes"]
+    metrics_op = {
+        "accuracy": accuracy,
+        "loss": loss
     }
 
     input_tensor = {
-        'image': images_t,
-        'label': labels
+        'image': images,
+        'label': labels,
+        'keep_prob': keep_prob
     }
-    return loss, eval_metric_ops, input_tensor
+
+    """summary"""
+    train_loss_summary = tf.summary.scalar('t_loss', loss)
+    train_metrics_summary = tf.summary.scalar('t_metrics', metrics_op['accuracy'])
+    val_metrics_summary = tf.summary.scalar('v_metrics', metrics_op['accuracy'])
+
+    summary_op = {
+        'train': tf.summary.merge([train_loss_summary, train_metrics_summary]),
+        'test': tf.summary.merge([val_metrics_summary])
+    }
+    return loss, metrics_op, input_tensor, summary_op
 
 
 def augement_data(tfrecords_filenames, times=10):
@@ -130,118 +177,91 @@ def augement_data(tfrecords_filenames, times=10):
     return file_names
 
 
-def train(epoch_iteration=100, batch_size=8, angle_range=15, time=100, eval_epoch_iteration=100):
-    train_data_path = os.path.join(FLAGS.tf_data, 'train-00000.tfrecord')
-    val_data_path = os.path.join(FLAGS.tf_data, 'validation-00000.tfrecord')
-    tf.logging.info("\t[train_data] in %s\n[val_data] in %s" % (train_data_path, val_data_path))
+def save_model(epoch_iteration, angle_range, sess):
+    saver = tf.train.Saver()
+    saver_path = saver.save(sess, os.path.join(FLAGS.save_path,
+                                               "mode_ite_%d_angel_%d.ckpt" % (
+                                                   epoch_iteration, angle_range)))
+    print("[Save model] %s" % saver_path)
 
-    train_data_files = augement_data(train_data_path, times=time)
-    val_data_files = augement_data(val_data_path, times=time)
 
-    train_images, train_labels = dataset_fer.read_and_decode(train_data_files, 1,
-                                                             batch_size=batch_size,
-                                                             num_threads=8,
-                                                             max_angle=angle_range)
+EPOCHS = 50
+TRAIN_SIZE = 4 * (35887 * 2 - 10000)
 
-    val_images, val_labels = dataset_fer.read_and_decode(val_data_files, 1,
-                                                         batch_size=batch_size,
-                                                         num_threads=8,
-                                                         max_angle=angle_range)
 
-    model = cnn_model_fn(train_images)
-    loss, metrics, input_tensor = train_op(model, train_labels)
+def train(epoch_iteration=400, batch_size=8, angle_range=15):
+    train_data_path = glob.glob(os.path.join(
+        os.path.abspath(FLAGS.tf_data),
+        "train" + "*"))
+
+    test_data_path = glob.glob(os.path.join(
+        os.path.abspath(FLAGS.tf_data),
+        "validation" + "*"))
+
+    [train_image, train_label], train_iter = get_data(train_data_path, batch_size=batch_size,
+                                                      epoches_num=epoch_iteration,
+                                                      max_angle=angle_range)
+
+    [test_image, test_label], test_iter = get_data(test_data_path, batch_size=batch_size, epoches_num=epoch_iteration,
+                                                   max_angle=angle_range)
+
+    loss, metrics, input_tensor, summary_op = train_op(new_model, train_image, train_label)
 
     global_step = tf.Variable(0)
     learning_rate = tf.train.exponential_decay(0.1, global_step, 300, 0.99, staircase=True)
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
+    # optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
 
-    tf.logging.info("\tStart Triaining")
+    optimizer = tf.train.AdamOptimizer(learning_rate, beta1=0.5).minimize(loss, global_step=global_step)
     with tf.Session() as sess:
-        sess.run(tf.local_variables_initializer())
-        sess.run(tf.global_variables_initializer())
+        sess.run(tf.initialize_all_variables())
+        sess.run(train_iter.initializer)
+        sess.run(test_iter.initializer)
 
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coord)
+        summ_writer = tf.summary.FileWriter(FLAGS.save_path, sess.graph)
 
         tf.logging.info("\tstart epoch")
+        step = 0
         for epoch in range(epoch_iteration):
-            try:
-                train_image, train_label = sess.run([train_images, train_labels])
+            for batch_id in range(int(TRAIN_SIZE / batch_size)):
+                step += 1
+                """train"""
+                # get data
+                train_image_v, train_label_v = sess.run([train_image, train_label])
 
-                _, loss_v, acc = sess.run([optimizer, loss, metrics['accuracy']],
-                                          feed_dict={input_tensor['image']: train_image,
-                                                     input_tensor['label']: train_label})
+                input_feed_train = {input_tensor['image']: train_image_v,
+                                    input_tensor['label']: train_label_v,
+                                    input_tensor['keep_prob']: 0.6}
 
-                val_image, val_label = sess.run([val_images, val_labels])
-                val_acc = sess.run(metrics['accuracy'],
-                                   feed_dict={input_tensor['image']: val_image,
-                                              input_tensor['label']: val_label})
-            except:
-                tf.logging.warning("Traing data exthuastic")
-                break;
+                # backpropagation
+                _, t_summary = sess.run([optimizer, summary_op['train']], feed_dict=input_feed_train)
+                summ_writer.add_summary(t_summary, epoch)
 
-            if epoch % 100 == 0:
-                print("In epoch %d, loss: %.3f, accuracy: %.3f, validation accuracy: %.3f" % (
-                    epoch, loss_v, acc[0], val_acc[0]))
+                """test errors"""
+                test_image_v, test_label_v = sess.run([test_image, test_label])
+                input_feed_test = {input_tensor['image']: test_image_v,
+                                   input_tensor['label']: test_label_v,
+                                   input_tensor['keep_prob']: 0.6}
 
-        saver = tf.train.Saver()
-        saver_path = saver.save(sess, os.path.join(FLAGS.save_path,
-                                                   "mode_ite_%d_angel_%d.ckpt" % (epoch_iteration, angle_range)))
-        print('Finished! \t save files in %s' % saver_path)
-        # Stop the threads
-        coord.request_stop()
+                test_summary = sess.run(summary_op['test'], feed_dict=input_feed_test)
+                summ_writer.add_summary(test_summary, epoch)
 
-        # Wait for threads to stop
-        coord.join(threads)
-        sess.close()
+                """print"""
+                if step % 128 == 0:
+                    # update metrics and loss
+                    loss_v, tran_acc = sess.run([loss, metrics['accuracy']], feed_dict=input_feed_train)
+                    test_acc = sess.run(metrics['accuracy'], feed_dict=input_feed_test)
 
-    # evaluation
-    test_images, test_labels = dataset_fer.read_and_decode(val_data_files, 1,
-                                                           batch_size=batch_size,
-                                                           num_threads=8,
-                                                           max_angle=angle_range)
-    tf.logging.info("Evaluation begin")
-    with tf.Session() as sess:
-        sess.run(tf.local_variables_initializer())
-        sess.run(tf.global_variables_initializer())
+                    print("In epoch %d, [step] %d,  loss: %.3f, Train: %.3f, Test: %.3f" % (
+                        epoch, step, loss_v, tran_acc, test_acc))
 
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coord)
+            """save mode"""
+            if epoch % 1 == 0:
+                save_model(epoch, angle_range, sess)
 
-        tf.logging.info("\tstart epoch")
-        for epoch in range(eval_epoch_iteration):
-            #try:
-            val_image, val_label = sess.run([test_images, test_labels])
-            val_acc, prediction = sess.run([metrics['accuracy'], metrics['prediction']],
-                                               feed_dict={input_tensor['image']: val_image,
-                                                          input_tensor['label']: val_label})
-            #except:
-            #    tf.logging.warning("Evaluation Traing data exthuastic")
-            #    break;
-
-            if epoch % 100 == 0:
-                print("In epoch %d, validation accuracy: %.3f" % (
-                    epoch, val_acc[0]))
-
-            for i in range(batch_size):
-                plt.imshow(val_image[i, :, :, 0])
-                plt.title(str(val_label[i]) + str(prediction[i]))
-                file_path = os.path.join(FLAGS.inference_path, "epoch_%d_batch_%d.jpg" % (epoch, i))
-                plt.savefig(file_path)
-
-            plt.close()
-
-        # Stop the threads
-        coord.request_stop()
-
-        # Wait for threads to stop
-        coord.join(threads)
-        sess.close()
+        save_model(epoch, angle_range, sess)
 
 
 if __name__ == "__main__":
-    train(epoch_iteration=100,
-          batch_size=8,
-          angle_range=45,
-          time=500,
-          eval_epoch_iteration=10)
+    train(epoch_iteration=50,
+          batch_size=64,
+          angle_range=10)

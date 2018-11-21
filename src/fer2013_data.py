@@ -3,80 +3,22 @@ import matplotlib.pyplot as plt
 import math
 
 IMG_SIZE = 48
+CLIPED_SIZE = 42
+NUM_CHANNEL = 1
 
+EPOCHS = 50
+TRAIN_SIZE = 4 * (35887 * 2 - 10000)
+BATCH_SIZE = 50
 
-def read_and_decode(tfrecords_filenames, epoch_iteration=1, batch_size=30, num_threads=8, max_angle=15):
-    filename_queue = tf.train.string_input_producer(tfrecords_filenames, num_epochs=epoch_iteration)
-
-    reader = tf.TFRecordReader()
-    _, serialized_example = reader.read(filename_queue)
-
-    feature = {'image/encoded': tf.FixedLenFeature([], tf.string),
-               'image/label': tf.FixedLenFeature([], tf.int64)}
-
-    # Define a reader and read the next record
-    reader = tf.TFRecordReader()
-    _, serialized_example = reader.read(filename_queue)
-    # Decode the record read by the reader
-    features = tf.parse_single_example(serialized_example, features=feature)
-    # Convert the image data from string back to the numbers
-    image = tf.decode_raw(features['image/encoded'], tf.float32)
-    annotation = features['image/label']
-    image = tf.reshape(image, [IMG_SIZE, IMG_SIZE, 1])
-
-    annotation = tf.reshape(annotation, [1])
-    image, annotation = tf.train.shuffle_batch([image, annotation],
-                                               batch_size=batch_size,
-                                               capacity=30,
-                                               num_threads=num_threads,
-                                               min_after_dequeue=10,
-                                               allow_smaller_final_batch=True)
-    angle = tf.random_uniform([batch_size, 1], -1 * max_angle / 2, max_angle / 2) / 180 * math.pi
-    image = tf.contrib.image.rotate(image, angle[0])
-
-    return image, annotation
-
-
-def test_read(tfrecords_filename, epoch_iteration):
-    images, annotations = read_and_decode(tfrecords_filename, epoch_iteration)
-
-    vdic = {
-        0: 'angry',
-        1: 'disgust',
-        2: 'fear',
-        3: 'happy',
-        4: 'neutral',
-        5: 'sad',
-        6: 'surprise'
-    }
-
-    with tf.Session()  as sess:
-        sess.run(tf.local_variables_initializer())
-        sess.run(tf.global_variables_initializer())
-
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coord)
-
-        image, annotation = sess.run([images, annotations])
-
-        print("annotation", annotation)
-        # Let's read off 3 batches just for example
-        try:
-            for i in range(3):
-                plt.imshow(image[i, :, :, 0])
-                plt.title(annotation[i, 0])
-                plt.show()
-
-            plt.close()
-        except:
-            pass
-
-        # Stop the threads
-        coord.request_stop()
-
-        # Wait for threads to stop
-        coord.join(threads)
-        sess.close()
+vdic = {
+    0: 'angry',
+    1: 'disgust',
+    2: 'fear',
+    3: 'happy',
+    4: 'neutral',
+    5: 'sad',
+    6: 'surprise'
+}
 
 
 def inspect_content(tfrecords_filename):
@@ -105,23 +47,76 @@ def inspect_content(tfrecords_filename):
         print(label_v)
 
 
+def parser(serialized_example, max_angle=15):
+    """Parses a single tf.Example into image and label tensors."""
+    feature = {'image/encoded': tf.FixedLenFeature([], tf.string),
+               'image/label': tf.FixedLenFeature([], tf.int64)}
+
+    # Decode the record read by the reader
+    features = tf.parse_single_example(serialized_example, features=feature)
+    # Convert the image data from string back to the numbers
+    image = tf.decode_raw(features['image/encoded'], tf.float32)
+    annotation = features['image/label']
+    image = tf.reshape(image, [IMG_SIZE, IMG_SIZE, 1])
+
+    annotation = tf.reshape(annotation, [1])
+    angle = tf.random_uniform([1], -1 * max_angle / 2, max_angle / 2) / 180 * math.pi
+    image = tf.contrib.image.rotate(image, angle[0])
+    image = tf.image.random_crop(image, (CLIPED_SIZE, CLIPED_SIZE, 1))
+    # image = tf.image.resize_images(image, tf.convert_to_tensor([IMG_SIZE, IMG_SIZE]))
+
+    return image, annotation
+
+
+def get_data(tfrecords_filename, batch_size=50, epoches_num=40000, max_angle=15):
+    """
+    Get data operation
+
+    :param tfrecords_filename: list of file pathes
+    :param batch_size:
+    :param epoches_num:
+    :param max_angle:
+    :return:
+    """
+    # get dataset base
+    dataset = tf.data.TFRecordDataset(tfrecords_filename,
+                                      buffer_size=2 * batch_size,
+                                      num_parallel_reads=8).repeat()
+    # parse image and label
+    dataset = dataset.map(
+        parser, num_parallel_calls=batch_size)
+
+    # Potentially shuffle records.
+    min_queue_examples = int(epoches_num * 0.6)
+    dataset = dataset.shuffle(buffer_size=50 * 5)
+
+    # shuffle data
+    dataset = dataset.batch(batch_size)
+
+    # iterater
+    iterator = dataset.make_initializable_iterator()
+    next_element = iterator.get_next()
+
+    return next_element, iterator
+
+
 if __name__ == "__main__":
     tfrecords_filename = '/home/zhou/workspace/Face-detection-and-emotion-recognition/data/fer2013/tfrecords/train-00000.tfrecord'
 
-    test_read(tfrecords_filename, 2)
-    # inspect_content(tfrecords_filename)
-    # for example in tf.python_io.tf_record_iterator(tfrecords_filename):
-    #     result = tf.train.Example.FromString(example)
-    #
-    #     print(result)
+    [image, label], iterator = get_data([tfrecords_filename], batch_size=10, epoches_num=40000, max_angle=15)
+    new_annotation = tf.one_hot(tf.squeeze(label), depth=7)
+    print(new_annotation)
+    with tf.Session() as sess:
+        sess.run(iterator.initializer)
+        image, annotation, one_hot = sess.run([image, label, new_annotation])
 
-# %%
-# tfrecords_filename = '/home/zhou/workspace/Face-detection-and-emotion-recognition/data/fer2013/tfrecords/train-00000.tfrecord'
-# dataset = tf.data.TFRecordDataset([tfrecords_filename], buffer_size=1024, num_parallel_reads=8)
-# iterator = dataset.make_one_shot_iterator()
-# next_batch = iterator.get_next()
-#
-# sess = tf.Session()
-# print("epoch 1")
-# for _ in range(4):
-#     print(sess.run(next_batch))
+        print(image.shape)
+        print("annotation", annotation)
+        print("one_hot", one_hot)
+        for i in range(10):
+            plt.imshow(image[i, :, :, 0])
+            plt.title('%d, %s, %s' % (annotation[i, 0], vdic[annotation[i, 0]],
+                                      str(one_hot[i])))
+            plt.show()
+
+        plt.close()

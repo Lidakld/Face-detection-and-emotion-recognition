@@ -29,8 +29,7 @@ mkdir -p ${WORK_DIR}/inference
 
 # to images
 python3 ./image_gen.py ${WORK_DIR}/fer2013.csv \
-	 ${WORK_DIR}/images \
-	 ${WORK_DIR}/tfrecords 
+	 ${WORK_DIR}/images 
 
 # to tf records
 python3 ./build_fer2013_data.py  --image_folder ${WORK_DIR}/images \

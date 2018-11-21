@@ -22,10 +22,8 @@ def convert_cvs_to_images(args):
 
     path = args.package_path
     data = pd.read_csv(path)[['emotion', 'pixels']]
-    # %%
     emotion = data['emotion'].values
     pixels = data['pixels']
-    # %%
     images = list(pixels.apply(lambda x: x.split(' ')))
     images = np.asfarray(images)
     emotions = {0: 'angry',
@@ -37,13 +35,14 @@ def convert_cvs_to_images(args):
                 6: 'neutral'}
 
     outpath = args.image_path
-    for i in range(images.shape[1]):
+    logging.info("Data size, [emotion] %d \t [images] %d" % (len(emotion), len(images)))
+    for i in range(len(emotion)):
         if i % 200 == 0:
-            logger.info("converting percentage %22f" % (i / images.shape[1]))
+            logger.info("converting percentage %22f w/ %d" % (i / len(emotion), i))
         img = images[i].reshape(48, 48)
         im = Image.fromarray(img).convert('RGB')
         im_name = '{:04d}'.format(i) + '.jpg'
-        if i <= images.shape[1] * 0.8:
+        if i <= len(emotion) * 0.8:
             usage = 'train'
         else:
             usage = 'validation'
@@ -69,14 +68,13 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='convert download [data] to tf-record, [data]('
                     'https://www.kaggle.com/c/challenges-in-representation-learning-facial-expression-recognition'
-                    '-challenge/data)',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+                    '-challenge/data)')
     parser.add_argument("package_path",
+                        default="./fer2013/fer2013.csv",
                         help="path to csv data package")
     parser.add_argument("image_path",
+                        default="./fer2013/images",
                         help="path to converted image")
-    parser.add_argument("tf_record_path",
-                        help="path to tf record files")
 
     return parser.parse_args()
 
@@ -87,7 +85,7 @@ def main():
     if convert_cvs_to_images(args) is not True:
         logger.error("converting failed")
     else:
-        logger.error("converiting success")
+        logger.info("converiting success")
 
 
 if __name__ == "__main__":
