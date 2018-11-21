@@ -39,7 +39,7 @@ NUM_CHANNEL = 1
 
 
 def new_model(data):
-    keep_prob = tf.placeholder(tf.float32, name='KEEP')
+    keep_prob = 1 #tf.placeholder(tf.float32, name='KEEP')
     data = tf.image.resize_images(data, tf.convert_to_tensor([42, 42]))
     print("Data: %s\n" % str(data))
     # first layer IN: 42*42*1  OUT: 20*20*32
@@ -153,8 +153,7 @@ def train_op(model, images, labels):
 
     input_tensor = {
         'image': images,
-        'label': labels,
-        'keep_prob': keep_prob
+        'label': labels
     }
 
     """summary"""
@@ -229,8 +228,7 @@ def train(epoch_iteration=400, batch_size=8, angle_range=15):
                 train_image_v, train_label_v = sess.run([train_image, train_label])
 
                 input_feed_train = {input_tensor['image']: train_image_v,
-                                    input_tensor['label']: train_label_v,
-                                    input_tensor['keep_prob']: 0.6}
+                                    input_tensor['label']: train_label_v}
 
                 # backpropagation
                 _, t_summary = sess.run([optimizer, summary_op['train']], feed_dict=input_feed_train)
@@ -239,8 +237,7 @@ def train(epoch_iteration=400, batch_size=8, angle_range=15):
                 """test errors"""
                 test_image_v, test_label_v = sess.run([test_image, test_label])
                 input_feed_test = {input_tensor['image']: test_image_v,
-                                   input_tensor['label']: test_label_v,
-                                   input_tensor['keep_prob']: 0.6}
+                                   input_tensor['label']: test_label_v}
 
                 test_summary = sess.run(summary_op['test'], feed_dict=input_feed_test)
                 summ_writer.add_summary(test_summary, epoch)
