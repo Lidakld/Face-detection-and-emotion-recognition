@@ -146,5 +146,45 @@ def train(batch_size=BATCH_SIZE):
         print('Finished!')
 
 
+def test():
+    test_data_path = glob.glob(os.path.join(
+        os.path.abspath(FLAGS.tf_data),
+        "validation" + "*"))
+
+    loaded_graph = tf.Graph()
+    with tf.Session(graph=loaded_graph) as sess:
+        [x_test, y_test], test_iter = get_data(test_data_path, batch_size=50,
+                                               max_angle=5)
+        # load the model
+        loader = tf.train.import_meta_graph(SAVE_PATH + '.meta')
+        loader.restore(sess, SAVE_PATH)
+        load_x = loaded_graph.get_tensor_by_name('INPUT:0')
+        load_y = loaded_graph.get_tensor_by_name('LABEL:0')
+        load_acc = loaded_graph.get_tensor_by_name('ACCURACY:0')
+        load_log = loaded_graph.get_tensor_by_name('LOGITS:0')
+        load_keep = loaded_graph.get_tensor_by_name('KEEP:0')
+        # record accuracy
+        total_batch_acc = 0
+        batch_count = TEST_SIZE // BATCH_SIZE
+        for batch_i in range(batch_count):
+            log = np.zeros((BATCH_SIZE, EMO_NUM))
+            y_feats = y_test[batch_i * BATCH_SIZE: (batch_i + 1) * BATCH_SIZE]
+            for k in range(4):
+                x_feats, y_feats = sess.run([x_test, y_test])
+                log1 = sess.run(load_log, feed_dict={
+                    load_x: x_feats, load_y: y_feats, load_keep: 1.0
+                })
+
+                log += log1
+            emos = sess.run(tf.argmax(log, 1))
+            correct_emos = sess.run(tf.argmax(y_feats, 1))
+            tmp = emos == correct_emos
+            acc = tmp.sum() / tmp.shape[0]
+            total_batch_acc += acc
+            print('In test batch %d: the accuracy is %.3f' % (batch_i, acc))
+        print('Total accuracy in test set is %.3f' % (total_batch_acc / batch_count))
+
+
 if __name__ == '__main__':
     train()
+    test()
