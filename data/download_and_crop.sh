@@ -11,7 +11,7 @@ WORK_DIR="./fer2013"
 mkdir -p "${WORK_DIR}"
 
 # Download the csv
-BASE_URL="https://s3-us-west-2.amazonaws.com/cs522.com/fer2013.tar.gz"
+BASE_URL="http://s3-us-west-2.amazonaws.com/cs522.com/fer2013.tar.gz"
 FILENAME="fer2013.tar.gz"
 
 if [ ! -f "${FILENAME}" ]; then
